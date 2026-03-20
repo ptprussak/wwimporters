@@ -74,8 +74,8 @@ patterns. This is where real business value lives.
    "I don't know." It confidently returns wrong numbers.
 
 2. **Schema discovery is not enough.** The LLM can see column names, but
-   it can't infer that `Allocation Weight` must be multiplied into revenue,
-   or that `Valid From`/`Valid To` define a temporal range for point-in-time
+   it can't infer that `Allocation_Weight` must be multiplied into revenue,
+   or that `Valid_From`/`Valid_To` define a temporal range for point-in-time
    joins.
 
 3. **Bridge tables break assumptions.** LLMs default to 1:1 joins. Without
