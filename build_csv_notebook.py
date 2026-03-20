@@ -24,7 +24,7 @@ Loads **14 base tables** from CSV files, then adds **4 enrichment layers** as De
 | Setting | Value |
 |---|---|
 | Source | `Files/csv_export/*.csv` (uploaded to Lakehouse) |
-| Schema | `wwi` |
+| Schema | `dbo` |
 | Kernel | Fabric Synapse PySpark |
 
 > **Pre-requisite:** Upload the `csv_export/` folder to your Lakehouse **Files** section before running.""")
@@ -35,21 +35,25 @@ Loads **14 base tables** from CSV files, then adds **4 enrichment layers** as De
 # ═══════════════════════════════════════════════════════════════════
 code('''# ── Configuration ────────────────────────────────────────────────
 OVERWRITE_TABLES = True          # False = skip tables that already exist
-SCHEMA = "wwi"
-CSV_ROOT = "Files/csv_export"    # path inside Lakehouse Files/ area
+SCHEMA = "dbo"
+CSV_ROOT = "Files"               # path inside Lakehouse Files/ area
 
 # ── Imports ──────────────────────────────────────────────────────
 from pyspark.sql import functions as F
 import random
 
 # ── Schema ───────────────────────────────────────────────────────
-spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
+# dbo schema exists by default in Fabric Lakehouse; no need to create it
 
 # ── Helpers ──────────────────────────────────────────────────────
 _summary = []
 
 def write_table(df, name):
     """Write DataFrame as a Delta table; track row count."""
+    # Rename columns: replace spaces with underscores for SQL analytics endpoint
+    for col_name in df.columns:
+        if " " in col_name:
+            df = df.withColumnRenamed(col_name, col_name.replace(" ", "_"))
     full = f"{SCHEMA}.{name}"
     mode = "overwrite" if OVERWRITE_TABLES else "ignore"
     df.write.format("delta").mode(mode).option("overwriteSchema", "true").saveAsTable(full)
@@ -290,41 +294,35 @@ code('''print("\\u2500\\u2500 Enrichment: Dimension_Customer_SCD2 \\u2500\\u2500
 
 base = spark.table(f"{SCHEMA}.Dimension_Customer")
 
-# Current rows: Is Current = true
+# Current rows: Is_Current = true
 current = (
     base
-    .withColumn("Valid From", F.to_date(F.col("Valid From")))
-    .withColumn("Valid To", F.to_date(F.lit("9999-12-31")))
-    .withColumn("Is Current", F.lit(True))
+    .withColumn("Valid_From", F.to_date(F.col("Valid_From")))
+    .withColumn("Valid_To", F.to_date(F.lit("9999-12-31")))
+    .withColumn("Is_Current", F.lit(True))
 )
 
-# Historical rows: first 150 customers with flipped Buying Group
+# Historical rows: first 150 customers with flipped Buying_Group
 flip = {"Tailspin Toys": "Wingtip Toys", "Wingtip Toys": "Tailspin Toys", "N/A": "Tailspin Toys"}
 flip_expr = F.create_map(*[item for k, v in flip.items() for item in (F.lit(k), F.lit(v))])
 
 historical = (
-    base.filter(F.col("Customer Key") <= 150)
-    .withColumn("Buying Group", flip_expr[F.col("Buying Group")])
-    .withColumn("Valid From", F.to_date(F.lit("2013-01-01")))
-    .withColumn("Valid To", F.to_date(F.lit("2018-12-31")))
-    .withColumn("Is Current", F.lit(False))
+    base.filter(F.col("Customer_Key") <= 150)
+    .withColumn("Buying_Group", flip_expr[F.col("Buying_Group")])
+    .withColumn("Valid_From", F.to_date(F.lit("2013-01-01")))
+    .withColumn("Valid_To", F.to_date(F.lit("2018-12-31")))
+    .withColumn("Is_Current", F.lit(False))
 )
 
 # Adjust current rows for those 150 customers to start from 2019
 current_updated = (
-    current.filter(F.col("Customer Key") <= 150)
-    .withColumn("Valid From", F.to_date(F.lit("2019-01-01")))
+    current.filter(F.col("Customer_Key") <= 150)
+    .withColumn("Valid_From", F.to_date(F.lit("2019-01-01")))
 )
-current_unchanged = current.filter(F.col("Customer Key") > 150)
+current_unchanged = current.filter(F.col("Customer_Key") > 150)
 
 scd2 = historical.unionByName(current_updated).unionByName(current_unchanged)
-write_table(scd2, "Dimension_Customer_SCD2")
-
-write_view(
-    f"CREATE OR REPLACE VIEW {SCHEMA}.vw_Customer_Current AS "
-    f"SELECT * FROM {SCHEMA}.Dimension_Customer_SCD2 WHERE `Is Current` = true",
-    "vw_Customer_Current"
-)''')
+write_table(scd2, "Dimension_Customer_SCD2")''')
 
 # ── SCD2: Dimension_StockItem_SCD2 ──────────────────────────────
 code('''print("\\u2500\\u2500 Enrichment: Dimension_StockItem_SCD2 \\u2500\\u2500")
@@ -334,50 +332,44 @@ base = spark.table(f"{SCHEMA}.Dimension_Stock_Item")
 # Current rows
 current = (
     base
-    .withColumn("Valid From", F.to_date(F.lit("2020-01-01")))
-    .withColumn("Valid To", F.to_date(F.lit("9999-12-31")))
-    .withColumn("Is Current", F.lit(True))
+    .withColumn("Valid_From", F.to_date(F.lit("2020-01-01")))
+    .withColumn("Valid_To", F.to_date(F.lit("9999-12-31")))
+    .withColumn("Is_Current", F.lit(True))
 )
 
 # 2019 historical: prices at 85% (first 100 items)
 hist_2019 = (
-    base.filter(F.col("Stock Item Key") <= 100)
-    .withColumn("Unit Price", F.round(F.col("Unit Price") * 0.85, 2))
-    .withColumn("Recommended Retail Price",
-        F.round(F.col("Recommended Retail Price") * 0.85, 2))
-    .withColumn("Valid From", F.to_date(F.lit("2013-01-01")))
-    .withColumn("Valid To", F.to_date(F.lit("2018-12-31")))
-    .withColumn("Is Current", F.lit(False))
+    base.filter(F.col("Stock_Item_Key") <= 100)
+    .withColumn("Unit_Price", F.round(F.col("Unit_Price") * 0.85, 2))
+    .withColumn("Recommended_Retail_Price",
+        F.round(F.col("Recommended_Retail_Price") * 0.85, 2))
+    .withColumn("Valid_From", F.to_date(F.lit("2013-01-01")))
+    .withColumn("Valid_To", F.to_date(F.lit("2018-12-31")))
+    .withColumn("Is_Current", F.lit(False))
 )
 
 # 2020 historical: prices at 92% (first 100 items)
 hist_2020 = (
-    base.filter(F.col("Stock Item Key") <= 100)
-    .withColumn("Unit Price", F.round(F.col("Unit Price") * 0.92, 2))
-    .withColumn("Recommended Retail Price",
-        F.round(F.col("Recommended Retail Price") * 0.92, 2))
-    .withColumn("Valid From", F.to_date(F.lit("2019-01-01")))
-    .withColumn("Valid To", F.to_date(F.lit("2019-12-31")))
-    .withColumn("Is Current", F.lit(False))
+    base.filter(F.col("Stock_Item_Key") <= 100)
+    .withColumn("Unit_Price", F.round(F.col("Unit_Price") * 0.92, 2))
+    .withColumn("Recommended_Retail_Price",
+        F.round(F.col("Recommended_Retail_Price") * 0.92, 2))
+    .withColumn("Valid_From", F.to_date(F.lit("2019-01-01")))
+    .withColumn("Valid_To", F.to_date(F.lit("2019-12-31")))
+    .withColumn("Is_Current", F.lit(False))
 )
 
 scd2 = hist_2019.unionByName(hist_2020).unionByName(current)
-write_table(scd2, "Dimension_StockItem_SCD2")
-
-write_view(
-    f"CREATE OR REPLACE VIEW {SCHEMA}.vw_StockItem_Current AS "
-    f"SELECT * FROM {SCHEMA}.Dimension_StockItem_SCD2 WHERE `Is Current` = true",
-    "vw_StockItem_Current"
-)''')
+write_table(scd2, "Dimension_StockItem_SCD2")''')
 
 # ── Bridge_SupplierSubstitution ──────────────────────────────────
 code('''print("\\u2500\\u2500 Enrichment: Bridge_SupplierSubstitution \\u2500\\u2500")
 
 # Get actual key ranges from loaded tables
 max_stock = spark.table(f"{SCHEMA}.Dimension_Stock_Item").agg(
-    F.max("Stock Item Key")).collect()[0][0]
+    F.max("Stock_Item_Key")).collect()[0][0]
 max_supplier = spark.table(f"{SCHEMA}.Dimension_Supplier").agg(
-    F.max("Supplier Key")).collect()[0][0]
+    F.max("Supplier_Key")).collect()[0][0]
 
 rng = random.Random(42)
 rel_types = ["Primary", "Secondary", "Emergency"]
@@ -394,13 +386,13 @@ for i in range(200):
 
 from pyspark.sql.types import *
 schema = StructType([
-    StructField("Stock Item Key", IntegerType()),
-    StructField("Primary Supplier Key", IntegerType()),
-    StructField("Substitute Supplier Key", IntegerType()),
-    StructField("Relationship Type", StringType()),
-    StructField("Lead Time Days", IntegerType()),
-    StructField("Unit Cost Premium Pct", DoubleType()),
-    StructField("Is Active", BooleanType()),
+    StructField("Stock_Item_Key", IntegerType()),
+    StructField("Primary_Supplier_Key", IntegerType()),
+    StructField("Substitute_Supplier_Key", IntegerType()),
+    StructField("Relationship_Type", StringType()),
+    StructField("Lead_Time_Days", IntegerType()),
+    StructField("Unit_Cost_Premium_Pct", DoubleType()),
+    StructField("Is_Active", BooleanType()),
 ])
 write_table(spark.createDataFrame(rows, schema), "Bridge_SupplierSubstitution")''')
 
@@ -414,14 +406,14 @@ segments = ["High Value", "Growth", "Loyal", "Seasonal",
             "At Risk", "New Business", "Tail"]
 seg_rows = [(i + 1, segments[i]) for i in range(7)]
 seg_schema = StructType([
-    StructField("Segment Key", IntegerType()),
+    StructField("Segment_Key", IntegerType()),
     StructField("Segment", StringType()),
 ])
 write_table(spark.createDataFrame(seg_rows, seg_schema), "Dimension_CustomerSegment")
 
 # Bridge_CustomerSegment — 1-3 segments per customer, weights sum to 1.0
 max_cust = spark.table(f"{SCHEMA}.Dimension_Customer").agg(
-    F.max("Customer Key")).collect()[0][0]
+    F.max("Customer_Key")).collect()[0][0]
 
 rng = random.Random(42)
 bridge_rows = []
@@ -441,11 +433,27 @@ for ck in range(1, max_cust + 1):
         bridge_rows.append((ck, sk, wt))
 
 br_schema = StructType([
-    StructField("Customer Key", IntegerType()),
-    StructField("Segment Key", IntegerType()),
-    StructField("Allocation Weight", DoubleType()),
+    StructField("Customer_Key", IntegerType()),
+    StructField("Segment_Key", IntegerType()),
+    StructField("Allocation_Weight", DoubleType()),
 ])
 write_table(spark.createDataFrame(bridge_rows, br_schema), "Bridge_CustomerSegment")''')
+
+
+# ── Views ─────────────────────────────────────────────────────────
+code('''print("\\u2500\\u2500 Views \\u2500\\u2500")
+
+write_view(
+    f"CREATE OR REPLACE VIEW {SCHEMA}.vw_Customer_Current AS "
+    f"SELECT * FROM {SCHEMA}.Dimension_Customer_SCD2 WHERE Is_Current = true",
+    "vw_Customer_Current"
+)
+
+write_view(
+    f"CREATE OR REPLACE VIEW {SCHEMA}.vw_StockItem_Current AS "
+    f"SELECT * FROM {SCHEMA}.Dimension_StockItem_SCD2 WHERE Is_Current = true",
+    "vw_StockItem_Current"
+)''')
 
 
 # ═══════════════════════════════════════════════════════════════════
