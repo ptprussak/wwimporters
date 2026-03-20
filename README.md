@@ -1,151 +1,149 @@
-# WideWorldImportersDW → Microsoft Fabric Lakehouse
+# Fabric Data Agent Demo — Wide World Importers
 
-Load the [WideWorldImportersDW](https://learn.microsoft.com/en-us/sql/samples/wide-world-importers-dw-database-catalog) sample data warehouse into a Microsoft Fabric Lakehouse as Delta tables, then configure Fabric data agents and a Copilot Studio agent to demonstrate how instruction quality affects query accuracy.
+Two sample **Microsoft Fabric data agents** built on the WideWorldImportersDW data warehouse. A **simple agent** with minimal instructions silently returns wrong answers for complex queries, while an **advanced agent** with full data model documentation handles them correctly — same LLM, same data, different instructions.
 
-## Prerequisites
+The demo proves that **agent instruction quality is the single biggest lever for accuracy** when building data agents over enterprise data warehouses with SCD2 dimensions, bridge tables, and weighted allocations.
+
+---
+
+## Option A: Just Review the Agent Configs
+
+No Fabric workspace needed. The agent configuration files are self-contained and ready to read:
+
+| File | What it is |
+|---|---|
+| [`agents/simple_agent.md`](agents/simple_agent.md) | Minimal agent config — deliberately under-specified to show failure modes |
+| [`agents/advanced_agent.md`](agents/advanced_agent.md) | Full agent config — all 4 GA config sections, covers SCD2, bridge tables, weighted allocations |
+| [`agents/copilot_studio_agent.md`](agents/copilot_studio_agent.md) | Copilot Studio wrapper — model selection, settings, suggested prompts, test sets |
+| [`agents/demo_script.md`](agents/demo_script.md) | Side-by-side demo run script — 10 prompts with expected outcomes for each agent |
+
+See [`agents/README.md`](agents/README.md) for a detailed guide to the agent configs and demo narrative.
+
+---
+
+## Option B: Full Setup — Run the Demo Yourself
+
+Set up the data warehouse in Fabric, create both agents, and run the side-by-side demo.
+
+### Prerequisites
 
 | Requirement | Details |
 |---|---|
 | **OS** | Windows 10/11 |
-| **SQL Server** | 2019 or 2022, Developer or Express edition, **running** with Windows Authentication |
+| **SQL Server** | 2019 or 2022, Developer or Express edition, with Windows Authentication |
 | **Python** | 3.10+ with `pyodbc` (`pip install pyodbc`) |
-| **winget** | Ships with Windows 11; [install on Windows 10](https://learn.microsoft.com/en-us/windows/package-manager/winget/) |
-| **Fabric** | A workspace with a Lakehouse named **wwimporters** (any capacity, F2+) |
+| **Fabric** | A workspace with a Lakehouse named **wwimporters** (F2+ capacity) |
 
-## Pipeline: End-to-End Setup Order
+### Step 1 — Extract the bacpac to CSV
 
-### Step 1 — Download the bacpac
-
-Download **WideWorldImportersDW-Standard.bacpac** from the [SQL Server samples releases](https://github.com/Microsoft/sql-server-samples/releases/tag/wide-world-importers-v1.0) and save it to your `Downloads` folder.
-
-### Step 2 — Extract to CSV
+Download **WideWorldImportersDW-Standard.bacpac** from [SQL Server samples](https://github.com/Microsoft/sql-server-samples/releases/tag/wide-world-importers-v1.0), then:
 
 ```bash
 pip install pyodbc
 python extract_bacpac.py
 ```
 
-This will:
-- Install `sqlpackage` via winget (if not already installed)
-- Import the `.bacpac` into your local SQL Server as `WideWorldImportersDW`
-- Export all 14 Dimension/Fact tables to `csv_export/` as properly-quoted CSV files
+This imports the bacpac into local SQL Server and exports 14 tables to `csv_export/` as CSV files.
 
-**Options:**
 ```bash
+# Options
 python extract_bacpac.py --skip-import            # DB already exists, just export CSVs
 python extract_bacpac.py --server MYPC\SQLEXPRESS  # custom SQL Server instance
-python extract_bacpac.py --bacpac path/to/file.bacpac  # explicit bacpac path
 ```
 
-### Step 3 — Upload CSVs to Fabric
+### Step 2 — Set up the Lakehouse
 
 1. Open your Fabric workspace at [app.fabric.microsoft.com](https://app.fabric.microsoft.com)
-2. Navigate to your Lakehouse → **Files** section
-3. Upload all 14 CSV files from `csv_export/` directly into the **Files** root (~100 MB total)
+2. Create a Lakehouse named **wwimporters** (if it doesn't exist)
+3. Navigate to the Lakehouse → **Files** section
+4. Upload all 14 CSV files from `csv_export/` directly into the **Files** root (~100 MB total)
 
-### Step 4 — Run the Fabric notebook
+### Step 3 — Run the notebook to load data
 
 1. In your Fabric workspace, click **Import notebook**
 2. Upload `wwi_load_from_csv.ipynb`
-3. Open it and attach it to your **wwimporters** Lakehouse
+3. Open it and attach it to the **wwimporters** Lakehouse
 4. Click **Run All**
 
-The notebook reads each CSV from `Files/`, creates typed Delta tables in the `dbo` schema (with underscore column names), adds enrichment layers (SCD2, bridge tables, segment dimension), creates two views, and prints a validation summary.
+The notebook creates 14 typed Delta tables in the `dbo` schema, adds 4 enrichment layers (SCD2 dimensions, bridge tables, customer segments), creates 2 views, and prints a validation summary. Takes about 2 minutes.
 
-### Step 5 — Configure Fabric data agents
+### Step 4 — Create the Fabric data agents
 
-Create two Fabric data agents that connect to the Lakehouse SQL analytics endpoint:
+Create two agents that connect to the Lakehouse SQL analytics endpoint:
 
 1. **WWI Simple Agent** — configured per [`agents/simple_agent.md`](agents/simple_agent.md)
-   - Agent Instructions only (minimal), Example Queries only (4 basic)
-   - Data Source Description and Data Source Instructions left blank
+   - Only Agent Instructions (minimal) and Example Queries (4 basic) are filled
+   - Data Source Description and Data Source Instructions left **intentionally blank**
+
 2. **WWI Advanced Agent** — configured per [`agents/advanced_agent.md`](agents/advanced_agent.md)
-   - All 4 config sections filled: Agent Instructions, Data Source Description, Data Source Instructions, Example Queries (14 queries)
+   - All 4 config sections filled: Agent Instructions, Data Source Description, Data Source Instructions, Example Queries (14 queries covering all patterns)
 
-### Step 6 — (Optional) Configure Copilot Studio agent
+### Step 5 — (Optional) Create a Copilot Studio agent
 
-Create a Copilot Studio agent that wraps the advanced Fabric data agent:
-- Configured per [`agents/copilot_studio_agent.md`](agents/copilot_studio_agent.md)
-- Adds a conversational UI layer on top of the Fabric data agent
-- Can be published to Teams for end-user access
+Wrap the advanced Fabric data agent in a Copilot Studio agent for a Teams-ready chat interface. Configured per [`agents/copilot_studio_agent.md`](agents/copilot_studio_agent.md).
 
-### Step 7 — Run the demo
+### Step 6 — Run the demo
 
-Follow [`agents/demo_script.md`](agents/demo_script.md) to run 10 prompts side-by-side against both agents. The simple agent silently produces wrong answers for SCD2, bridge table, and weighted allocation queries. The advanced agent handles them all correctly — same LLM, same data, different instructions.
-
----
-
-## Alternative Pipeline (Synthetic Data)
-
-A self-contained notebook that creates synthetic data directly in Fabric without needing CSV upload or SQL Server:
-
-```bash
-python build_notebook.py          # generates wwi_dw_fabric_load.ipynb
-```
-
-Import and run `wwi_dw_fabric_load.ipynb` in Fabric. Useful for quick demos without the bacpac extraction step.
+Follow [`agents/demo_script.md`](agents/demo_script.md) to run 10 prompts side-by-side against both agents.
 
 ---
 
 ## What Gets Loaded
 
-### 14 Base Tables
+### 14 Base Tables (~930K rows)
 
 | Table | Rows | Description |
 |---|---:|---|
+| `Dimension_Date` | 1,461 | Calendar 2013-2016 |
 | `Dimension_City` | 116,295 | Cities with SCD history |
 | `Dimension_Customer` | 403 | Customer dimension |
-| `Dimension_Date` | 1,461 | Calendar 2013-2016 |
-| `Dimension_Employee` | 213 | Employee dimension with SCD |
+| `Dimension_Employee` | 213 | Employee dimension |
 | `Dimension_Payment_Method` | 6 | Payment types |
-| `Dimension_Stock_Item` | 672 | Products with SCD history |
+| `Dimension_Stock_Item` | 672 | Products |
 | `Dimension_Supplier` | 28 | Supplier dimension |
 | `Dimension_Transaction_Type` | 15 | Transaction categories |
 | `Fact_Sale` | 228,265 | Sales transactions |
 | `Fact_Order` | 231,412 | Customer orders |
 | `Fact_Purchase` | 8,367 | Purchase orders |
 | `Fact_Movement` | 236,667 | Stock movements |
-| `Fact_Stock_Holding` | 227 | Current inventory levels |
+| `Fact_Stock_Holding` | 227 | Current inventory |
 | `Fact_Transaction` | 99,585 | Financial transactions |
 
 ### Enrichment Layers (added by notebook)
 
-| Table | Description |
+| Table/View | Description |
 |---|---|
-| `Dimension_Customer_SCD2` | SCD Type 2 with `Is_Current` flag + ~150 historical rows |
-| `Dimension_StockItem_SCD2` | SCD Type 2 with price history (85%/92% tiers) |
-| `Bridge_SupplierSubstitution` | M2M: stock items ↔ substitute suppliers |
-| `Dimension_CustomerSegment` + `Bridge_CustomerSegment` | Customer segmentation with weighted allocation |
+| `Dimension_Customer_SCD2` | SCD Type 2 with ~150 historical rows (buying group changes) |
+| `Dimension_StockItem_SCD2` | SCD Type 2 with price history (85%/92%/100% tiers) |
+| `Bridge_SupplierSubstitution` | Stock item → primary/substitute supplier network |
+| `Dimension_CustomerSegment` + `Bridge_CustomerSegment` | 7 segments with weighted allocation |
+| `vw_Customer_Current` | Current-state filter on Customer SCD2 |
+| `vw_StockItem_Current` | Current-state filter on StockItem SCD2 |
 
-### Views
-
-| View | Description |
-|---|---|
-| `vw_Customer_Current` | `Dimension_Customer_SCD2` filtered to `Is_Current = true` |
-| `vw_StockItem_Current` | `Dimension_StockItem_SCD2` filtered to `Is_Current = true` |
+---
 
 ## Repository Contents
 
 ```
-├── extract_bacpac.py              # Step 2: bacpac → SQL Server → CSV
-├── export_tables.py               # Standalone CSV export (used by extract_bacpac.py)
+├── extract_bacpac.py              # bacpac → SQL Server → CSV
+├── export_tables.py               # Standalone CSV exporter (called by extract_bacpac.py)
 ├── build_csv_notebook.py          # Generates wwi_load_from_csv.ipynb
-├── wwi_load_from_csv.ipynb        # Step 4: Fabric notebook (CSV → Delta)
+├── wwi_load_from_csv.ipynb        # Fabric notebook: CSV → Delta tables + enrichment
 ├── build_notebook.py              # (alt) Generates synthetic-data notebook
-├── wwi_dw_fabric_load.ipynb       # (alt) Self-contained notebook with synthetic data
+├── wwi_dw_fabric_load.ipynb       # (alt) Self-contained notebook, no CSV needed
 ├── agents/
-│   ├── simple_agent.md            # Step 5: Minimal Fabric data agent config
-│   ├── advanced_agent.md          # Step 5: Full Fabric data agent config
-│   ├── copilot_studio_agent.md    # Step 6: Copilot Studio agent config
-│   └── demo_script.md            # Step 7: Side-by-side demo run script
-├── csv_export/                    # Generated CSV files (not in git)
+│   ├── README.md                  # Guide to agent configs and demo narrative
+│   ├── simple_agent.md            # Minimal Fabric data agent config
+│   ├── advanced_agent.md          # Full Fabric data agent config
+│   ├── copilot_studio_agent.md    # Copilot Studio agent config
+│   └── demo_script.md            # Side-by-side demo run script (10 prompts)
+├── csv_export/                    # Generated CSV files (~100 MB, not in git)
 └── .gitignore
 ```
 
 ## Notes
 
-- **Notebooks are generated, not hand-edited.** To change `wwi_load_from_csv.ipynb`, edit `build_csv_notebook.py` and re-run it. Same for `wwi_dw_fabric_load.ipynb` via `build_notebook.py`.
-- **Column names use underscores** (e.g., `Customer_Key`, `Valid_From`). The CSV export preserves original SQL Server names with spaces, but `write_table` renames all columns to use underscores when saving to Delta.
-- **Schema is `dbo`** — tables are created under `[wwimporters].[dbo]`, the default schema for Fabric Lakehouse SQL analytics endpoints.
-- **Binary columns skipped:** `Location` (geography), `Photo` (varbinary) columns are excluded from the CSV export.
-- **Idempotent:** Set `OVERWRITE_TABLES = True` (default) in the notebook for clean reruns.
+- **Notebooks are generated, not hand-edited.** Edit `build_csv_notebook.py` and re-run to regenerate `wwi_load_from_csv.ipynb`.
+- **Column names use underscores** (e.g., `Customer_Key`, `Valid_From`). The CSV export preserves original SQL Server names with spaces, but the notebook renames all columns when saving to Delta.
+- **Schema is `dbo`** — all tables live under `[wwimporters].[dbo]`.
+- **Binary columns skipped** — `Location` (geography) and `Photo` (varbinary) are excluded from CSV export.
