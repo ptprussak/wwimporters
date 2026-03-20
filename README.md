@@ -126,11 +126,8 @@ Follow [`agents/demo_script.md`](agents/demo_script.md) to run 10 prompts side-b
 
 ```
 ├── extract_bacpac.py              # bacpac → SQL Server → CSV
-├── export_tables.py               # Standalone CSV exporter (called by extract_bacpac.py)
 ├── build_csv_notebook.py          # Generates wwi_load_from_csv.ipynb
 ├── wwi_load_from_csv.ipynb        # Fabric notebook: CSV → Delta tables + enrichment
-├── build_notebook.py              # (alt) Generates synthetic-data notebook
-├── wwi_dw_fabric_load.ipynb       # (alt) Self-contained notebook, no CSV needed
 ├── agents/
 │   ├── README.md                  # Guide to agent configs and demo narrative
 │   ├── simple_agent.md            # Minimal Fabric data agent config
