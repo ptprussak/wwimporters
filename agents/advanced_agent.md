@@ -665,24 +665,27 @@ NOT today's price.
 
 ---
 
-### Prompt 4 — Bridge: Supplier network
+### Prompt 4 — Bridge: Supplier cost exposure
 
-> **"Which suppliers can supply stock item 10, including backups?"**
+> **"If our primary supplier for stock item 10 can't deliver, what's our cost exposure for alternatives?"**
 
-**Expected:** The agent queries `bridge_suppliersubstitution` and returns the
-primary supplier plus all Secondary and Emergency substitutes, with their lead
-times and cost premiums. Only active relationships are shown.
+**Expected:** The agent queries `bridge_suppliersubstitution` filtered to stock
+item 10, joins both supplier keys to `dimension_supplier`, and presents a cost
+exposure analysis: each substitute's `Unit_Cost_Premium_Pct`, `Lead_Time_Days`,
+and `Relationship_Type` (Secondary vs. Emergency). The response frames this as
+a risk/cost tradeoff, not just a flat table dump.
 
 ---
 
-### Prompt 5 — Weighted segments: Revenue allocation
+### Prompt 5 — Weighted segments: Revenue breakdown
 
-> **"What are the total sales for the 'High Value' customer segment?"**
+> **"Break down total 2016 revenue across all customer segments."**
 
 **Expected:** The agent joins through `bridge_customersegment`, applies
-`Allocation_Weight` to each sale, and returns weighted revenue. The agent
-should note that multi-segment customers have their revenue split
-proportionally.
+`Allocation_Weight` to each sale, and returns weighted revenue per segment.
+The segment totals sum to exactly the same 2016 figure from Prompt 1 — proving
+no double-counting. The agent should note that values are weighted by
+allocation to avoid double-counting multi-segment customers.
 
 ---
 

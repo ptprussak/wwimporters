@@ -33,8 +33,8 @@ outcome for each.
 | 1 | "What was total sales revenue in 2016?" | Correct | Correct |
 | 2 | "Which customers were part of the Tailspin Toys buying group?" | Wrong — current snapshot only, misses ~150 historical members | Correct — shows current AND historical from SCD2 |
 | 3 | "What was the unit price of stock item 50 in 2015?" | Wrong — returns today's price | Correct — returns 85% historical price from SCD2 |
-| 4 | "Which suppliers can supply stock item 10, including backups?" | Wrong — only finds purchase history | Correct — shows Primary/Secondary/Emergency from bridge |
-| 5 | "What are the total sales for the 'High Value' customer segment?" | Fails or wrong — doesn't know segments exist | Correct — weighted revenue via bridge table |
+| 4 | "If our primary supplier for stock item 10 can't deliver, what's our cost exposure for alternatives?" | Partial — finds bridge but misses cost premium / lead time analysis | Correct — shows substitutes with cost premium %, lead times, and risk assessment |
+| 5 | "Break down total 2016 revenue across all customer segments." | **Visibly wrong** — segment totals sum to ~140% of actual revenue (double-counts multi-segment customers) | Correct — weighted totals sum to exactly the same figure as Prompt 1 |
 | 6 | "Show me 2015 revenue by customer segment, using buying group as of sale date." | Catastrophically wrong — wrong on 3 axes | Correct — temporal SCD2 + weighted bridge |
 
 ### Extended prompts (advanced agent only)
@@ -56,7 +56,9 @@ technology.
 
 ### Act 2 — "But wait..." (Prompts 2-5)
 The simple agent silently returns **wrong** answers for every complex query.
-The numbers look plausible — that's what makes this dangerous.
+Prompt 5 is the showstopper: the segment revenue totals visibly contradict the
+total from Prompt 1, proving the agent is double-counting. The numbers look
+plausible individually — that's what makes this dangerous.
 
 ### Act 3 — "The fix" (Prompts 2-6 on advanced agent)
 Same prompts, same LLM, same data — but now with proper instructions, every
@@ -73,10 +75,11 @@ patterns. This is where real business value lives.
 1. **Silent failures are worse than errors.** The simple agent never says
    "I don't know." It confidently returns wrong numbers.
 
-2. **Schema discovery is not enough.** The LLM can see column names, but
-   it can't infer that `Allocation_Weight` must be multiplied into revenue,
-   or that `Valid_From`/`Valid_To` define a temporal range for point-in-time
-   joins.
+2. **Schema discovery is not enough.** The LLM can find bridge tables on its
+   own, but it can't infer that `Allocation_Weight` must be multiplied into
+   revenue. Prompt 5 proves this: the simple agent finds the segment table
+   but double-counts, producing totals that exceed the known total from
+   Prompt 1.
 
 3. **Bridge tables break assumptions.** LLMs default to 1:1 joins. Without
    explicit instructions, they will never generate the dual-key pattern needed

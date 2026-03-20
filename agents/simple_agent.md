@@ -136,42 +136,48 @@ contains historical price tiers (85% of current price for 2013-2018, 92% for
 
 ---
 
-### Prompt 4 — Bridge Table Trap: Substitute suppliers
+### Prompt 4 — Bridge Table Trap: Supplier cost exposure
 
-> **"Which suppliers can supply stock item 10?"**
+> **"If our primary supplier for stock item 10 can't deliver, what's our cost exposure for alternatives?"**
 
-**Why it will be wrong:** The agent will look at `fact_purchase` to find
-suppliers that *have* supplied item 10. It has no knowledge of
-`bridge_suppliersubstitution` which maps primary and substitute suppliers.
-The answer will miss backup/emergency suppliers and the relationship type
-(Primary, Secondary, Emergency).
+**Why it will be wrong:** The agent can discover `bridge_suppliersubstitution`
+via schema introspection, but without instructions it won't know how to
+interpret the cost/risk dimensions. It will likely return a flat list of
+suppliers without analyzing `Unit_Cost_Premium_Pct` as a cost exposure metric
+or relating `Lead_Time_Days` to delivery risk. The answer will be a partial
+data dump rather than the cost analysis the question asks for.
 
 **What a correct answer requires:**
-- Query `bridge_suppliersubstitution`
+- Query `bridge_suppliersubstitution` filtered to stock item 10
 - Join both `Primary_Supplier_Key` and `Substitute_Supplier_Key` to
   `dimension_supplier`
-- Show relationship type, lead time, and cost premium
+- Present `Unit_Cost_Premium_Pct` and `Lead_Time_Days` as cost exposure
+  factors per substitute
+- Distinguish Secondary vs. Emergency relationship types and their
+  different risk profiles
 
 ---
 
-### Prompt 5 — Weighted Segment Trap: Customer segmentation
+### Prompt 5 — Weighted Segment Trap: Revenue double-counting
 
-> **"What are the total sales for the 'High Value' customer segment?"**
+> **"Break down total 2016 revenue across all customer segments."**
 
-**Why it will be wrong:** The agent does not know that
-`dimension_customersegment` and `bridge_customersegment` exist. It will either:
-- Fail entirely ("I don't have segment data"), or
-- Hallucinate by guessing which customers are "High Value" based on revenue
+**Why it will be visibly wrong:** The agent can discover
+`bridge_customersegment` and `dimension_customersegment` via schema
+introspection. It will join them and return revenue per segment — but without
+knowing to multiply by `Allocation_Weight`, it counts the full revenue for
+every segment a customer belongs to. Since customers belong to 1-3 segments,
+the segment totals will sum to ~140% of the actual 2016 total from Prompt 1.
 
-Even if it somehow found the bridge table, it wouldn't know to apply the
-`Allocation_Weight` — a customer can belong to multiple segments with fractional
-weights that sum to 1.0. Simply summing all sales for customers tagged "High
-Value" **double-counts** revenue for multi-segment customers.
+This is the **showstopper demo moment**: the audience already knows the real
+2016 total from Prompt 1. When the segment breakdown adds up to significantly
+more, the error is self-evident — no explanation needed.
 
 **What a correct answer requires:**
+
 - Join `fact_sale` → `bridge_customersegment` → `dimension_customersegment`
 - Multiply each sale's `Total_Including_Tax` by `Allocation_Weight`
-- Filter for Segment = 'High Value'
+- The weighted segment totals must sum to exactly the 2016 total from Prompt 1
 
 ---
 
