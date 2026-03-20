@@ -4,6 +4,8 @@ Two sample **Microsoft Fabric data agents** built on the WideWorldImportersDW da
 
 The demo proves that **agent instruction quality is the single biggest lever for accuracy** when building data agents over enterprise data warehouses with SCD2 dimensions, bridge tables, and weighted allocations.
 
+Presentation deck: [FabCon2026_DataAgents_v3.pptx](FabCon2026_DataAgents_v3.pptx)
+
 ---
 
 ## Option A: Just Review the Agent Configs
